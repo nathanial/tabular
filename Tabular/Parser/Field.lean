@@ -17,7 +17,7 @@ def isLineEnding (c : Char) : Bool :=
   c == '\n' || c == '\r'
 
 /-- Consume line ending (handles CRLF, LF, CR) -/
-def consumeLineEnding : Parser Bool := do
+def consumeLineEnding : Parser Unit Bool := do
   match ← peek with
   | some '\r' =>
     let _ ← anyChar
@@ -29,7 +29,7 @@ def consumeLineEnding : Parser Bool := do
   | _ => return false
 
 /-- Check if at field terminator (delimiter, newline, or EOF) -/
-private def atFieldEnd (config : Config) : Parser Bool := do
+private def atFieldEnd (config : Config) : Parser Unit Bool := do
   match ← peek with
   | none => return true
   | some c => return c == config.delimiter || isLineEnding c
@@ -38,7 +38,7 @@ private def atFieldEnd (config : Config) : Parser Bool := do
     - Fields enclosed in quote character
     - Embedded quotes escaped as "" (doubled)
     - Embedded newlines allowed -/
-partial def parseQuotedField (config : Config) : Parser Value := do
+partial def parseQuotedField (config : Config) : Parser Unit Value := do
   let _ ← char config.quote
 
   let mut content := ""
@@ -59,7 +59,7 @@ partial def parseQuotedField (config : Config) : Parser Value := do
   return { content }
 
 /-- Parse an unquoted field -/
-partial def parseUnquotedField (config : Config) : Parser Value := do
+partial def parseUnquotedField (config : Config) : Parser Unit Value := do
   let mut content := ""
   while !(← atFieldEnd config) do
     let c ← anyChar
@@ -72,7 +72,7 @@ partial def parseUnquotedField (config : Config) : Parser Value := do
   return { content := finalContent }
 
 /-- Parse a single field (quoted or unquoted) -/
-def parseField (config : Config) : Parser Value := do
+def parseField (config : Config) : Parser Unit Value := do
   if config.trimWhitespace then
     skipWhile (fun c => c == ' ' || c == '\t')
 

@@ -13,7 +13,7 @@ open Sift
 open Tabular
 
 /-- Skip empty lines -/
-partial def skipEmptyLines : Parser Unit := do
+partial def skipEmptyLines : Parser Unit Unit := do
   while true do
     match ← peek with
     | none => break
@@ -24,7 +24,7 @@ partial def skipEmptyLines : Parser Unit := do
         break
 
 /-- Parse entire CSV/TSV document -/
-partial def parseDocument (config : Config) : Parser Table := do
+partial def parseDocument (config : Config) : Parser Unit Table := do
   -- Check for empty input
   if ← atEnd then
     return { headers := #[], rows := #[], config }
