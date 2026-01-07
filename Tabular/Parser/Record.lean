@@ -1,57 +1,51 @@
 /-
   Tabular.Parser.Record
-  Single record (row) parsing
+  Single record (row) parsing using Sift combinators
 -/
+import Sift
 import Tabular.Parser.Field
 import Tabular.Core.Row
 
 namespace Tabular.Parser
 
+open Sift
 open Tabular
-open Parser
 
 /-- Parse a single record (one row of fields) -/
-def parseRecord : Parser (Array Value) := do
-  let config ← getConfig
+partial def parseRecord (config : Config) : Parser (Array Value) := do
+  -- Handle empty line
+  match ← peek with
+  | none => return #[]
+  | some c => if isLineEnding c then return #[]
+
   let mut fields : Array Value := #[]
 
-  -- Handle empty line
-  if ← atEnd then return fields
-  match ← peek? with
-  | some c => if isLineEnding c then return fields
-  | none => return fields
-
-  let mut done := false
-  while !done do
-    let field ← parseField
+  while true do
+    let field ← parseField config
     fields := fields.push field
 
-    if ← atEnd then done := true
-    else
-      -- Check what follows the field
-      match ← peek? with
-      | some c =>
-        if c == config.delimiter then
-          let _ ← next  -- consume delimiter
-          -- Continue to next field
-        else if isLineEnding c then
-          done := true
-        else
-          let pos ← getPosition
-          throw (.unexpectedChar pos c "delimiter or newline")
-      | none => done := true
+    match ← peek with
+    | none => break
+    | some c =>
+      if c == config.delimiter then
+        let _ ← anyChar  -- consume delimiter
+        -- Continue to next field
+      else if isLineEnding c then
+        break
+      else
+        Parser.fail s!"expected delimiter or newline, got '{c}'"
 
   return fields
 
 /-- Parse header row -/
-def parseHeaders : Parser (Array String) := do
-  let values ← parseRecord
+def parseHeaders (config : Config) : Parser (Array String) := do
+  let values ← parseRecord config
   let _ ← consumeLineEnding  -- consume line ending after headers
   return values.map (·.content)
 
 /-- Parse a data row with column index mapping -/
-def parseRow (headers : Array String) : Parser Row := do
-  let values ← parseRecord
+def parseRow (config : Config) (headers : Array String) : Parser Row := do
+  let values ← parseRecord config
   if headers.isEmpty then
     return Row.ofArray values
   else

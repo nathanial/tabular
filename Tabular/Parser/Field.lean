@@ -1,65 +1,69 @@
 /-
   Tabular.Parser.Field
   Field/cell parsing with quote handling (RFC 4180 compliant)
+  Built on Sift parser combinator library
 -/
-import Tabular.Parser.Primitives
+import Sift
+import Tabular.Core.Config
 import Tabular.Core.Value
 
 namespace Tabular.Parser
 
+open Sift
 open Tabular
-open Parser
+
+/-- Check if character is a line ending -/
+def isLineEnding (c : Char) : Bool :=
+  c == '\n' || c == '\r'
+
+/-- Consume line ending (handles CRLF, LF, CR) -/
+def consumeLineEnding : Parser Bool := do
+  match ← peek with
+  | some '\r' =>
+    let _ ← anyChar
+    if (← peek) == some '\n' then let _ ← anyChar
+    return true
+  | some '\n' =>
+    let _ ← anyChar
+    return true
+  | _ => return false
 
 /-- Check if at field terminator (delimiter, newline, or EOF) -/
-private def atFieldEnd : Parser Bool := do
-  let config ← getConfig
-  match ← peek? with
+private def atFieldEnd (config : Config) : Parser Bool := do
+  match ← peek with
   | none => return true
   | some c => return c == config.delimiter || isLineEnding c
 
 /-- Parse a quoted field (RFC 4180 compliant)
-    - Fields enclosed in double quotes
-    - Embedded quotes escaped as ""
+    - Fields enclosed in quote character
+    - Embedded quotes escaped as "" (doubled)
     - Embedded newlines allowed -/
-def parseQuotedField : Parser Value := do
-  let config ← getConfig
-  let startPos ← getPosition
-  let _ ← next  -- consume opening quote
+partial def parseQuotedField (config : Config) : Parser Value := do
+  let _ ← char config.quote
 
   let mut content := ""
-  let mut done := false
-  while !done do
-    if ← atEnd then
-      throw (.unclosedQuote startPos)
-    let c ← next
+  while true do
+    if ← atEnd then Parser.fail "unclosed quote"
+    let c ← anyChar
     if c == config.quote then
-      -- Check for escaped quote
-      match ← peek? with
-      | some c' =>
-        if c' == config.quote then
-          let _ ← next
-          content := content.push config.quote
-        else
-          -- End of quoted field
-          done := true
-      | none =>
-        -- End of input after quote = end of field
-        done := true
+      -- Check for escaped quote ""
+      if (← peek) == some config.quote then
+        let _ ← anyChar
+        content := content.push config.quote
+      else
+        -- End of quoted field
+        break
     else
       content := content.push c
 
   return { content }
 
 /-- Parse an unquoted field -/
-def parseUnquotedField : Parser Value := do
-  let config ← getConfig
+partial def parseUnquotedField (config : Config) : Parser Value := do
   let mut content := ""
-  let mut done := false
-  while !done do
-    if ← atFieldEnd then done := true
-    else
-      let c ← next
-      content := content.push c
+  while !(← atFieldEnd config) do
+    let c ← anyChar
+    content := content.push c
 
   -- Optionally trim whitespace
   let finalContent := if config.trimWhitespace
@@ -68,19 +72,18 @@ def parseUnquotedField : Parser Value := do
   return { content := finalContent }
 
 /-- Parse a single field (quoted or unquoted) -/
-def parseField : Parser Value := do
-  let config ← getConfig
+def parseField (config : Config) : Parser Value := do
   if config.trimWhitespace then
-    skipInlineWhitespace
+    skipWhile (fun c => c == ' ' || c == '\t')
 
-  match ← peek? with
+  match ← peek with
   | none => return Value.empty
   | some c =>
     if c == config.quote then
-      parseQuotedField
+      parseQuotedField config
     else if c == config.delimiter || isLineEnding c then
       return Value.empty
     else
-      parseUnquotedField
+      parseUnquotedField config
 
 end Tabular.Parser
