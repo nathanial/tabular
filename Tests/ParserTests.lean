@@ -122,6 +122,4 @@ test "whitespace trimming" := do
     | none => throw (IO.userError "no rows")
   | .error e => throw (IO.userError s!"parse failed: {e}")
 
-#generate_tests
-
 end Tests.Parser

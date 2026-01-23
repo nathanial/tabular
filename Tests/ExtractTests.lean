@@ -211,6 +211,4 @@ test "case insensitive column names" := do
     | none => throw (IO.userError "no row")
   | .error e => throw (IO.userError s!"parse failed: {e}")
 
-#generate_tests
-
 end Tests.Extract
